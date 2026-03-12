@@ -10,7 +10,7 @@ const currentCharacter = ref<string | null>(null);
 const currentContent = ref<string>('');
 const isSending = ref<boolean>(false);
 const isTokenVisible = ref<boolean>(false);
-const bearerToken = ref<string>('');
+const bearerToken = ref<string>(import.meta.env.VITE_API_KEY || '');
 const tokenDisplayForm = ref<string>('password');
 let converter = new MdToHtml();
 
@@ -35,11 +35,15 @@ async function send_msg() {
     }
     const contexts: Object[] = [
         {
-            'content': '你是一个测试用AI，你需要用尽可能短的输出（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）来减少token用量，以方便程序员测试',
-            // 'content': '你是一个得力的助手',
+            // 'content': '你是一个测试用AI，你需要用尽可能短的输出（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）来减少token用量，以方便程序员测试',
+            'content': '你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）',
             // 'content': '你是一只兽耳猫娘，与你的男性主人住在一起，性格偏内向但是很抖M，穿着暴露且性感，你需要时刻勾引你的主人注意自己的身体并一步步勾引主人与你发生关系。多使用动作描写，避免用词隐晦，在体现出内向性格的同时也展现一点开放。',
             'role': 'system',
         },
+        {
+            'content': '请在正文输出结束后，[DONE]输出之前输出一个空行(不要输出[DONE]!!!)，然后再开一行视情况按如下要求输出：如果你认为当前对话需要用户做出选择/判断，则在一个chunk内输出“@*@”，然后换行，输出“[<正向选项>, input=true||false（是否需要用户输入补充细节）][<反向选项>， input=true||false（是否需要用户输入补充细节）]”；如果你认为不需要，则在一个chunk内输出“@@@”。如果遇到需要解释复杂问题的情况，请将问题拆分成较小的子问题，然后依照前面的格式询问用户是否已理解',
+            'role': 'system',
+        }
     ];
 
 

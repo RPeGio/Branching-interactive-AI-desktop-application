@@ -13,39 +13,6 @@ pub struct MessageContext {
 
 #[tauri::command]
 pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageContext>) -> Result<(), String> {
-// pub async fn stream_chat(app: AppHandle, key: String) -> Result<(), String> {
-    // let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    //     .parent()
-    //     .unwrap()
-    //     .parent()
-    //     .unwrap()
-    //     .to_path_buf();
-    
-    // let env_path = project_root.join(".env");
-    // println!("Looking for .env at: {:?}", env_path);
-    
-    // if env_path.exists() {
-    //     println!(".env file found, loading...");
-    //     dotenv::from_path(&env_path).ok();
-    // } else {
-    //     println!(".env file not found at {:?}, trying default location", env_path);
-    //     dotenv::dotenv().ok();
-    // }
-    
-    // // 打印所有环境变量用于调试
-    // println!("Available env vars: {:?}", env::vars().collect::<Vec<_>>());
-    
-    // let auth = match env::var("API_KEY") {
-    //     Ok(key) => {
-    //         println!("API_KEY loaded successfully (first 10 chars): {}...", &key[..10.min(key.len())]);
-    //         key
-    //     },
-    //     Err(_) => {
-    //         let error_msg = format!("API_KEY not found. .env path: {:?}", env_path);
-    //         println!("{}", error_msg);
-    //         return Err(error_msg);
-    //     }
-    // };
     let client = reqwest::Client::new();
     
     println!("Sending request to DeepSeek API...");
