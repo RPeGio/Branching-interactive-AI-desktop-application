@@ -14,7 +14,6 @@ const bearerToken = ref<string>(import.meta.env.VITE_API_KEY || '');
 const tokenDisplayForm = ref<string>('password');
 let converter = new MdToHtml();
 
-// textarea enter processing
 function textareaEnter(event: KeyboardEvent) {
     if(event.key === 'Enter' && !isSending.value)
         send_msg();

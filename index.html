@@ -2,12 +2,126 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tauri + Vue + Typescript App</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* 防止整个页面出现滚动条 */
+      }
+      
+      .titlebar {
+        height: 30px;
+        background: transparent;
+        user-select: none;
+        display: flex;
+        justify-content: space-between;
+        flex-shrink: 0; /* 防止 titlebar 被压缩 */
+        position: relative; /* 使用相对定位而非固定定位 */
+        box-shadow: 0 0 5px rgba(0, 50, 200, 0.5);
+        z-index: 1000; /* 确保标题栏在其他元素之上 */
+      }
+      
+      .titlebar-title {
+        max-width: 140px;
+        flex: 1;
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        height: 30px;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      .titlebar-favicon {
+        max-width: 30px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      
+      .titlebar-favicon img {
+        max-width: 65%;
+        height: auto;
+      }
+      
+      .titlebar-button {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        width: 30px;
+        height: 30px;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      
+      .titlebar-button:hover {
+        background: #626262;
+      }
+      
+      #app {
+        flex: 1; /* 让应用内容填充剩余空间 */
+        overflow: auto; /* 只在内容超出时显示滚动条 */
+        scrollbar-width: thin;
+        scrollbar-color: #bcbcbc #f1f1f1;
+      }
+      
+      /* 自定义滚动条样式 */
+      #app::-webkit-scrollbar {
+        width: 12px; /* 垂直滚动条宽度 */
+        height: 12px; /* 水平滚动条高度 */
+      }
+      
+      #app::-webkit-scrollbar-track {
+        background: #f1f1f1; /* 滚动条轨道颜色 */
+        border-radius: 10px;
+      }
+      
+      #app::-webkit-scrollbar-thumb {
+        background: #bcbcbc; /* 滚动条滑块颜色 */
+        border-radius: 10px;
+      }
+      
+      #app::-webkit-scrollbar-thumb:hover {
+        background: #999999; /* 滑块悬停时的颜色 */
+      }
+      
+      #app::-webkit-scrollbar-corner {
+        background: #f1f1f1; /* 滚动条角落的背景色 */
+      }
+    </style>
   </head>
 
   <body>
+    <div data-tauri-drag-region class="titlebar">
+      <div class="titlebar-title" id="titlebar-title">
+        <span class="titlebar-favicon">
+          <img src="./src-tauri/icons/favicon.ico" alt="favicon" />
+        </span>
+        <span style="font-size: 0.84rem; font-weight: lighter;">分支式AIChat</span>
+      </div>
+      <div class="titlebar-buttons">
+        <div class="titlebar-button" id="titlebar-minimize">
+          <img
+            src="https://api.iconify.design/mdi:minimize.svg"
+            alt="minimize"
+          />
+        </div>
+        <div class="titlebar-button" id="titlebar-maximize">
+          <img
+            src="https://api.iconify.design/mdi:maximize.svg"
+            alt="maximize"
+          />
+        </div>
+        <div class="titlebar-button" id="titlebar-close">
+          <img src="https://api.iconify.design/mdi:close.svg" alt="close"/>
+        </div>
+      </div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

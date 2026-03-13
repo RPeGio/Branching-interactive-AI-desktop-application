@@ -15,7 +15,11 @@
         "title": "分支式AIChat",
         "width": 1280,
         "height": 720,
-        "resizable": false
+        "minWidth": 960,
+        "minHeight": 540,
+        "fullscreen": false,
+        "decorations": false,
+        "alwaysOnTop": false
       }
     ],
     "security": {
