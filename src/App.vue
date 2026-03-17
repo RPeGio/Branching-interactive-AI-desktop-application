@@ -6,6 +6,12 @@ import { MdToHtml } from 'streaming-md-to-html';
 // import MdToHtmlEnhancer from './utils/MdToHtmlEnhancer';
 // import msgslot from './components/msgslot.vue';
 
+interface balanceMessage {
+    available: string,
+    balance: string | null,
+    currency: string | null,
+}
+
 const currentCharacter = ref<string | null>(null);
 const currentContent = ref<string>('');
 const isSending = ref<boolean>(false);
@@ -24,14 +30,23 @@ async function send_msg() {
     const inputElement = document.querySelector('input[placeholder="输入您的问题/指令..."]') as HTMLInputElement;
     const userInput = inputElement?.value || null;
     if(!userInput) return;
-    if(userInput == 'displayToken') {
+    if(userInput == '/displayToken') {
         tokenDisplayForm.value = "text";
         return;
     }
-    if(userInput == 'hideToken') {
+
+    if(userInput == '/hideToken') {
         tokenDisplayForm.value = "password";
         return;
     }
+
+    if(userInput == '/balance') {
+        await invoke("balance", {
+            key: bearerToken.value,
+        });
+        return;
+    }
+
     const contexts: Object[] = [
         {
             // 'content': '你是一个测试用AI，你需要用尽可能短的输出（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）来减少token用量，以方便程序员测试',
@@ -89,6 +104,7 @@ async function send_msg() {
 }
 
 let aiResponseElement: HTMLElement | null = null;
+
 listen("completion-status", (event) => {
     console.log('Completion status:', event.payload || event);
     currentCharacter.value = 'assistant';
@@ -100,6 +116,7 @@ listen("completion-status", (event) => {
         isSending.value = false;
     }
 });
+
 listen("completion-chunk", (event) => {
     // console.log('Chunk received:', event.payload || event, `${typeof (event.payload)}`);
     const payload = typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload);
@@ -128,6 +145,7 @@ listen("completion-chunk", (event) => {
 
     }
 });
+
 listen("completion-end", (event) => {
     console.log('Completion end:', event.payload || event);
     currentContent.value = '';
@@ -136,6 +154,12 @@ listen("completion-end", (event) => {
     isSending.value = false;
     converter = new MdToHtml();
 });
+
+listen("balance", (event) => {
+    console.log('Balance info:', event.payload);
+    const infos = event.payload as balanceMessage;
+    alert(`当前api-key可用性：${infos.available}\n当前剩余余额：${infos.balance} ${infos.currency}`);
+})
 </script>
 
 <template>

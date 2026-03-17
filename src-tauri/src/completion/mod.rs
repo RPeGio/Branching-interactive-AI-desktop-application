@@ -2,13 +2,20 @@
 // use std::env;
 use futures::StreamExt;
 use serde;
-use serde_json;
+use serde_json::{self};
 use tauri::{AppHandle, Emitter};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct MessageContext {
     pub content: String,
     pub role: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct BalanceMessage {
+    pub available: bool,
+    pub balance: String,
+    pub currency: String,
 }
 
 #[tauri::command]
@@ -69,5 +76,47 @@ pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageConte
             }
         }
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn balance(app: AppHandle, key: String) -> Result<(), String> {
+    let client = reqwest::Client::new();
+
+    println!("Requesting for balance...");
+
+    let response = client
+        .get("https://api.deepseek.com/user/balance")
+        .header("Authorization", format!("Bearer {}", key))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // println!("{:?}", response.text().await);
+    if let Ok(res) = response.text().await {
+        let body: serde_json::Value = serde_json::from_str(&res).map_err(|e| e.to_string())?;
+        let [mut balance, mut currency] = [String::new(), String::new()];
+        let mut available: bool = false;
+        
+        if let Some(str) = body["is_available"].as_bool() {
+            available = str;
+        }
+        if let Some(str) = body["balance_infos"][0]["total_balance"].as_str() {
+            balance = str.to_string();
+        }
+        if let Some(str) = body["balance_infos"][0]["currency"].as_str() {
+            currency = str.to_string();
+        }
+
+        let response = BalanceMessage {
+            available,
+            balance,
+            currency,
+        };
+
+        app.emit("balance", response).map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }

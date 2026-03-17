@@ -14,7 +14,7 @@ fn increment(counter: f32) -> f32 {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, increment, completion::stream_chat])
+        .invoke_handler(tauri::generate_handler![greet, increment, completion::stream_chat, completion::balance])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
