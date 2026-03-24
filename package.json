@@ -12,10 +12,12 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "~2.4.2",
     "@tryghost/kg-markdown-html-renderer": "^7.1.13",
     "streaming-md-to-html": "^0.0.38",
     "very-small-parser": "^1.14.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-router": "^5.0.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",

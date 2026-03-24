@@ -20,6 +20,8 @@ pub struct BalanceMessage {
 
 #[tauri::command]
 pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageContext>) -> Result<(), String> {
+    if key.is_empty() { return Err("Bearer token is required!".to_string()); }
+
     let client = reqwest::Client::new();
     
     println!("Sending request to DeepSeek API...");
@@ -39,13 +41,16 @@ pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageConte
                 }).collect::<Vec<_>>(),
             "model": "deepseek-chat",
             "stream": true,
-            "max_tokens": 2000,
+            "max_tokens": 4000,
             "temperature": 0.7
         }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
     
+    if response.status().to_string() != String::from("200 OK") {
+        return Err(format!("{}", response.status().to_string()));
+    }
     app.emit("completion-status", response.status().to_string()).unwrap();
 
     let mut stream = response.bytes_stream();
@@ -81,6 +86,8 @@ pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageConte
 
 #[tauri::command]
 pub async fn balance(app: AppHandle, key: String) -> Result<(), String> {
+    if key.is_empty() { return Err("Bearer token is required!".to_string()); }
+    
     let client = reqwest::Client::new();
 
     println!("Requesting for balance...");
@@ -93,9 +100,14 @@ pub async fn balance(app: AppHandle, key: String) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    // println!("{:?}", response.text().await);
     if let Ok(res) = response.text().await {
+        // println!("{:?}", res);
         let body: serde_json::Value = serde_json::from_str(&res).map_err(|e| e.to_string())?;
+        
+        if let None = body["error"].as_null() {
+            return Err(format!("{}.\nError type: {}", body["error"]["message"], body["error"]["type"]));
+        }
+
         let [mut balance, mut currency] = [String::new(), String::new()];
         let mut available: bool = false;
         
@@ -119,4 +131,54 @@ pub async fn balance(app: AppHandle, key: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn title_genetation(key: String, contexts: Vec<MessageContext>) -> Result<String, String> {
+    if key.is_empty() { return Err("Bearer token is required!".to_string()); }
+    let client = reqwest::Client::new();
+    
+    println!("Sending title generation request to DeepSeek API...");
+    
+    let response = client
+        .post("https://api.deepseek.com/chat/completions")
+        .header("Authorization", format!("Bearer {}", key))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "messages": &contexts
+                .iter()
+                .map(|ctx| {
+                    serde_json::json!({
+                        "content": ctx.content,
+                        "role": ctx.role,
+                    })
+                }).collect::<Vec<_>>(),
+            "model": "deepseek-chat",
+            "stream": false,
+            "max_tokens": 2000,
+            "temperature": 0.7
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if response.status().to_string() != String::from("200 OK") {
+        return Err(format!("{}", response.status().to_string()));
+    }
+
+    // println!("Response: {:?}", response);
+    if let Ok(res) = response.text().await {
+        // println!("{:?}", res);
+        let body: serde_json::Value = serde_json::from_str(&res).map_err(|e| e.to_string())?;
+        
+        if let None = body["error"].as_null() {
+            return Err(format!("{}.\nError type: {}", body["error"]["message"], body["error"]["type"]));
+        }
+
+        if let Some(title) = body["choices"][0]["message"]["content"].as_str() {
+            return Ok(title.to_string());
+        }
+    }
+
+    Err("Failed to generate title".to_string())
 }

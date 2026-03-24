@@ -16,13 +16,13 @@
       
       .titlebar {
         height: 30px;
-        background: transparent;
+        background: #e3abe0;
         user-select: none;
         display: flex;
         justify-content: space-between;
         flex-shrink: 0; /* 防止 titlebar 被压缩 */
         position: relative; /* 使用相对定位而非固定定位 */
-        box-shadow: 0 0 5px rgba(0, 50, 200, 0.5);
+        box-shadow: 0 0 2px black;
         z-index: 1000; /* 确保标题栏在其他元素之上 */
       }
       
@@ -60,7 +60,7 @@
       }
       
       .titlebar-button:hover {
-        background: #626262;
+        background: #866585;
       }
       
       #app {
@@ -102,7 +102,12 @@
         <span class="titlebar-favicon">
           <img src="./src-tauri/icons/favicon.ico" alt="favicon" />
         </span>
-        <span style="font-size: 0.84rem; font-weight: lighter;">分支式AIChat</span>
+        <span id="titlebar-title-text" style="
+          font-size: 0.84rem;
+          font-weight: lighter;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;">分支式AIChat</span>
       </div>
       <div class="titlebar-buttons">
         <div class="titlebar-button" id="titlebar-minimize">
