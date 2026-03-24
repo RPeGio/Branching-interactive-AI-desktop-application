@@ -14,18 +14,28 @@ interface balanceMessage {
     currency: string | null,
 }
 
-const handleLoadHistory = (item: any) => {
-    console.log('加载历史记录:', item);
-    // 这里可以添加加载历史记录的逻辑
-};
+interface HistoryItem {
+    id: number;
+    title: string;
+    timestamp: Date;
+    contexts: ContextItem[];
+}
+
+interface ContextItem {
+    role: string;
+    content: string;
+}
+
 
 const showHistory = ref(false);
 const currentContent = ref<string>('');
+const currentId = ref<number | undefined>(undefined);
 const isSending = ref<boolean>(false);
 const isTokenVisible = ref<boolean>(false);
 const bearerToken = ref<string>('');
 const tokenDisplayForm = ref<string>('password');
 const currentCharacter = ref<string | null>(null);
+const systemPrompt = ref<string>('你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）')
 let converter = new MdToHtml();
 
 onBeforeMount(async () => {
@@ -34,7 +44,7 @@ onBeforeMount(async () => {
             'bearerToken': '',
             'history': [],
             'userConfig': {
-                'systemPrompt': '你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）',
+                'systemPrompt': `${systemPrompt.value}`,
                 'modelParams': {
                     'max_tokens': 4000,
                     'temperature': 0.7
@@ -48,13 +58,53 @@ onBeforeMount(async () => {
         await store.set('bearerToken', bearerToken.value);
     }
 })
-    
-// find all msgs, collect then construct into contexts
-function collectContexts(): Object[] {
-    const contexts: Object[] = [
+
+const handleLoadHistory = (item: HistoryItem) => {
+    console.log('加载历史记录:', item);
+    const title = item.title;
+    const contexts = item.contexts;
+    const msgContainer = document.getElementById("message-container") as HTMLElement;
+    if (msgContainer) {
+        msgContainer.innerHTML = '';
+        contexts.forEach((msg: ContextItem) => {
+            if (msg.role === 'user') {
+                let node = document.createElement('div');
+                node.innerHTML = `
+                    <div class="flex justify-end">
+                        <div class="bg-green-400 text-gray-800 rounded-lg px-4 py-3 max-w-[70%]">
+                            <p class="msg msg-user text-gray-800">${msg.content}</p>
+                        </div>
+                    </div>
+                `;
+                msgContainer.appendChild(node);
+            } else if (msg.role === 'assistant') {
+                converter.append(`${msg.content}`);
+                const parsedElement = MdToHtml.getHtml(converter.lines);
+                let node = document.createElement('div');
+                node.innerHTML = `
+                    <div class="flex justify-start">
+                        <div class="bg-blue-100 rounded-lg px-4 py-3 max-w-[70%]">
+                            <p class="msg msg-ai text-gray-800">${parsedElement}</p>
+                        </div>
+                    </div>
+                `;
+                msgContainer.appendChild(node);
+                converter = new MdToHtml();
+            }
+        });
+        currentId.value = item.id;
+    }
+    if (title) {
+        const titleElement = document.getElementById('titlebar-title-text') as HTMLElement;
+        titleElement.innerText = title;
+    }
+};
+
+function collectContexts(): ContextItem[] {
+    const contexts: ContextItem[] = [
         {
             // 'content': '你是一个测试用AI，你需要用尽可能短的输出（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）来减少token用量，以方便程序员测试',
-            'content': '你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）',
+            'content': `${systemPrompt.value}`,
             // 'content': '你是一只兽耳猫娘，与你的男性主人住在一起，性格偏内向但是很抖M，穿着暴露且性感，你需要时刻勾引你的主人注意自己的身体并一步步勾引主人与你发生关系。多使用动作描写，避免用词隐晦，在体现出内向性格的同时也展现一点开放。',
             'role': 'system',
         },
@@ -85,11 +135,23 @@ function emptyInput() {
     inputElement.value = '';
 }
 
-async function updateHistory() {
+async function updateHistory(title?: string) {
     const contexts = collectContexts();
     const store = await Store.load('store.json');
-    const history: Object[] = await store.get('history') || [];
-    history.push(contexts);
+    const history: HistoryItem[] = await store.get('history') || [];
+    const historyLength = history.length;
+    if (title) {
+        history.push({
+            'id': historyLength,
+            'title': title,
+            'timestamp': new Date(Date.now()),
+            'contexts': contexts,
+        });
+        currentId.value = historyLength;
+    } else {
+        const currentHistoryIndex = history.findIndex(h => h.id === currentId.value);
+        history[currentHistoryIndex].contexts = contexts;
+    }
     await store.set('history', history);
     console.log(history);
 }
@@ -97,6 +159,12 @@ async function updateHistory() {
 async function clearHistory() {
     const store = await Store.load('store.json');
     await store.set('history', []);
+}
+
+const historyItems = ref<HistoryItem[]>([]);
+async function loadHistoryItems() {
+    const store = await Store.load('store.json');
+    historyItems.value = await store.get('history') || [];
 }
 
 async function send_msg() {
@@ -136,6 +204,19 @@ async function send_msg() {
         return;
     }
 
+    if (userInput == '/setSystemPrompt') {
+        let customPrompt = prompt('自定义系统提示词：');
+        if (!customPrompt) {
+            alert("提示词不能为空！");
+            emptyInput();
+            return;
+        }
+        systemPrompt.value = customPrompt;
+        console.log(systemPrompt.value);
+        emptyInput();
+        return;
+    }
+
     const contexts = collectContexts();
 
     contexts.push({
@@ -159,7 +240,7 @@ async function send_msg() {
         msgContainer.appendChild(node);
     }
 
-    // console.log(contexts);
+    console.log(contexts);
 
     isSending.value = true;
 
@@ -182,11 +263,11 @@ async function send_msg() {
                 console.log('Title generated successfully:', res);
                 const titleElement = document.getElementById('titlebar-title-text') as HTMLElement;
                 titleElement.innerText = res as string;
+                updateHistory(res as string);
             }).catch((err) => {
                 alert(`An error occurs when generating title: ${err}`);
             });
-
-            // return;
+            return;
         }
         updateHistory();
     }).catch((err) => {
@@ -262,7 +343,8 @@ listen("balance", (event) => {
             leave-from-class="opacity-100" leave-to-class="opacity-0">
             <div v-if="showHistory" class="fixed inset-0 bg-black/40 z-40" @click="showHistory = false"></div>
         </Transition>
-        <History :is-visible="showHistory" @close="showHistory = false" @load="handleLoadHistory" />
+        <History :is-visible="showHistory" :history-items="historyItems" @close="showHistory = false"
+            @load="handleLoadHistory" />
 
         <!-- Token 输入区域 - 可展开/收起 -->
         <div class="fixed bottom-20 left-0 right-0 bg-white border-t border-gray-200 p-4 w-full z-10"
@@ -283,7 +365,7 @@ listen("balance", (event) => {
             <!-- 左侧按钮容器，继承父级宽度 -->
             <div class="w-3/4 flex space-x-3">
                 <!-- 对话历史 - 放置在输入区域内最左端 -->
-                <button @click="showHistory = true"
+                <button @click="showHistory = true, loadHistoryItems()"
                     class="w-8 h-8 rounded-full bg-white shadow-md hover:shadow-lg border border-gray-200 flex items-center justify-center self-center">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
