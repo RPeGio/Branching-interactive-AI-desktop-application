@@ -18,8 +18,21 @@ pub struct BalanceMessage {
     pub currency: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct UserConfig {
+    pub temperature: f32,
+    pub max_tokens: f32,
+    pub top_p: f32,
+    pub frequency_penalty: f32,
+}
+
 #[tauri::command]
-pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageContext>) -> Result<(), String> {
+pub async fn stream_chat(
+    app: AppHandle,
+    key: String,
+    contexts: Vec<MessageContext>,
+    model_config: UserConfig
+) -> Result<(), String> {
     if key.is_empty() { return Err("Bearer token is required!".to_string()); }
 
     let client = reqwest::Client::new();
@@ -41,8 +54,10 @@ pub async fn stream_chat(app: AppHandle, key: String, contexts: Vec<MessageConte
                 }).collect::<Vec<_>>(),
             "model": "deepseek-chat",
             "stream": true,
-            "max_tokens": 4000,
-            "temperature": 0.7
+            "max_tokens": model_config.max_tokens,
+            "temperature": model_config.temperature,
+            "top_p": model_config.top_p,
+            "frequency_penalty": model_config.frequency_penalty,
         }))
         .send()
         .await

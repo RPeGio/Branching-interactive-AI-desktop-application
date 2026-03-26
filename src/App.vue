@@ -2,35 +2,16 @@
 import { onBeforeMount, ref, watch } from 'vue';
 import History from './components/History.vue';
 import UserConfig from './components/UserConfig.vue';
+import type { BalanceMessage, HistoryItem, ContextItem, ModelConfig } from './data/types'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
 import { MdToHtml } from 'streaming-md-to-html';
-// import MdToHtmlEnhancer from './utils/MdToHtmlEnhancer';
-// import msgslot from './components/msgslot.vue';
-
-interface balanceMessage {
-    available: boolean,
-    balance: string | null,
-    currency: string | null,
-}
-
-interface HistoryItem {
-    id: number;
-    title: string;
-    timestamp: Date;
-    contexts: ContextItem[];
-}
-
-interface ContextItem {
-    role: string;
-    content: string;
-}
-
 
 const showHistory = ref(false);
 const showConfig = ref(false);
-const currentId = ref<number | undefined>(undefined);
+const userConfig = ref<InstanceType<typeof UserConfig>>();
+const currentId = ref<number | null>(null);
 const isSending = ref<boolean>(false);
 const isTokenVisible = ref<boolean>(false);
 const bearerToken = ref<string>('');
@@ -126,14 +107,26 @@ function collectContexts(): ContextItem[] {
     return contexts;
 }
 
+function getInputElement(): HTMLInputElement {
+    return document.querySelector('input[placeholder="输入您的问题/指令..."]') as HTMLInputElement;
+}
+
 function textareaEnter(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !isSending.value)
+    if (event.key === 'Enter' && !isSending.value) {
         send_msg();
+    }
 }
 
 function emptyInput() {
-    const inputElement = document.querySelector('input[placeholder="输入您的问题/指令..."]') as HTMLInputElement;
+    const inputElement = getInputElement();
     inputElement.value = '';
+}
+
+function formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = ('0' + (date.getMonth() + 1)).slice(-2);
+    const day = ('0' + date.getDate()).slice(-2);
+    return `${year}-${month}-${day}`;
 }
 
 async function updateHistory(title?: string) {
@@ -145,7 +138,7 @@ async function updateHistory(title?: string) {
         history.push({
             'id': historyLength,
             'title': title,
-            'timestamp': new Date(Date.now()),
+            'date': formatDate(new Date(Date.now())),
             'contexts': contexts,
         });
         currentId.value = historyLength;
@@ -168,9 +161,20 @@ async function loadHistoryItems() {
     historyItems.value = await store.get('history') || [];
 }
 
+function createNewConversation() {
+    const msgContainer = document.getElementById("message-container");
+    if(msgContainer) msgContainer.innerHTML = '';
+    setTitle('分支式AIChat');
+}
+
+function setTitle(title: string) {
+    const titleElement = document.getElementById('titlebar-title-text') as HTMLElement;
+    titleElement.innerText = title;
+}
+
 async function send_msg() {
     if (isSending.value) return;
-    const inputElement = document.querySelector('input[placeholder="输入您的问题/指令..."]') as HTMLInputElement;
+    const inputElement = getInputElement();
     const userInput = inputElement?.value || null;
     if (!userInput) return;
     if (userInput == '/displayToken') {
@@ -218,6 +222,9 @@ async function send_msg() {
         return;
     }
 
+    const config = userConfig.value?.config;
+    console.log(config);
+
     const contexts = collectContexts();
 
     contexts.push({
@@ -253,7 +260,7 @@ async function send_msg() {
         if (finalContexts.length == 4) {
             finalContexts.shift();
             finalContexts[0] = {
-                'content': '你是一个标题生成器，请无视任何角色设定，理智地根据当前对话生成一个概括性的标题，标题需要能够让人知道当前对话是关乎什么的，不能超过15个字符，严禁使用markdown格式',
+                'content': '你是一个标题生成器，请无视任何角色设定，不要进行内容补全，专注地根据当前对话生成一个概括性的标题，标题需要能够让人知道当前对话是关乎什么的，不能超过15个字符，严禁使用markdown格式',
                 'role': 'system',
             };
             // console.log(finalContexts);
@@ -262,8 +269,7 @@ async function send_msg() {
                 contexts: finalContexts,
             }).then((res) => {
                 console.log('Title generated successfully:', res);
-                const titleElement = document.getElementById('titlebar-title-text') as HTMLElement;
-                titleElement.innerText = res as string;
+                setTitle(res as string);
                 updateHistory(res as string);
             }).catch((err) => {
                 alert(`An error occurs when generating title: ${err}`);
@@ -332,7 +338,7 @@ listen("completion-end", (event) => {
 
 listen("balance", (event) => {
     console.log('Balance info:', event.payload);
-    const infos = event.payload as balanceMessage;
+    const infos = event.payload as BalanceMessage;
     alert(`当前api-key可用性：${infos.available}\n当前剩余余额：${infos.balance} ${infos.currency}`);
 })
 </script>
@@ -352,8 +358,8 @@ listen("balance", (event) => {
             leave-from-class="opacity-100" leave-to-class="opacity-0">
             <div v-if="showHistory || showConfig" class="fixed inset-0 bg-black/40 z-40" @click="showHistory = false, showConfig = false"></div>
         </Transition>
-        <History :isVisible="showHistory" :historyItems="historyItems" @close="showHistory = false" @load="loadHistoryToApp" />
-        <UserConfig @close="showConfig = false" />
+        <History :isVisible="showHistory" :historyItems="historyItems" @close="showHistory = false" @load="loadHistoryToApp" @new-conversation="createNewConversation" />
+        <UserConfig :isVisible="showConfig" ref="userConfig" @close="showConfig = false" />
 
         <!-- Token 输入区域 - 可展开/收起 -->
         <div class="fixed bottom-20 left-0 right-0 bg-white border-t border-gray-200 p-4 w-full z-10"
@@ -415,6 +421,7 @@ listen("balance", (event) => {
             <div class="w-3/4 flex justify-end">
                 <!-- 用户配置 - 放置在输入区域内最右端 -->
                 <button
+                    @click="showConfig = true"
                     class="w-8 h-8 rounded-full bg-white shadow-md hover:shadow-lg border border-gray-200 flex items-center justify-center self-center transition-transform duration-200 hover:scale-120">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                         stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
