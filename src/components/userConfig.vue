@@ -1,17 +1,9 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
-
-interface ConfigItem {
-    globalSystemPrompt: string;
-    currentSystemPrompt: string;
-    temperature: number;
-    maxTokens: number;
-    topP: number;
-    frequencyPenalty: number;
-}
+import { computed } from 'vue';
+import type { ConfigItem } from '../data/types';
 
 interface Props {
-    isVisible: boolean;
+    isVisible: boolean,
 }
 
 const props = defineProps<Props>();
@@ -20,14 +12,36 @@ const emit = defineEmits<{
     close: [];
 }>();
 
-// 用户配置数据
-const config = reactive<ConfigItem>({
-    globalSystemPrompt: '你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）',
-    currentSystemPrompt: '',
-    temperature: 1,
-    maxTokens: 4000,
-    topP: 0.9,
-    frequencyPenalty: 0.5
+const defaultSystemPrompt = defineModel<string>('defaultSystemPrompt');
+const globalSystemPrompt = defineModel<string>('globalSystemPrompt');
+const config = defineModel<ConfigItem>('userConfig', {
+    required: true,
+    default: () => ({
+        systemPrompt: '',
+        temperature: 1,
+        maxTokens: 4000,
+        topP: 0.9,
+        frequencyPenalty: 0.5
+    })
+});
+// const { systemPrompt, temperature, maxTokens, topP, frequencyPenalty } = toRefs(config.value as ConfigItem);
+
+// 监听config变化，便于调试
+// watch(config, (newValue, oldValue) => {
+//     console.log('config changed:', { oldValue, newValue });
+// }, { deep: true, immediate: true });
+
+// // 监听组件可见性变化，检查config状态
+// watch(() => props.isVisible, (isVisible) => {
+//     if (isVisible) {
+//         console.log('UserConfig became visible, config:', config.value);
+//     }
+// });
+
+// 判断当前对话系统提示词是否应该被锁定
+const isCurrentPromptLocked = computed(() => {
+    // 一旦当前对话系统提示词被设置（非空），就永久锁定
+    return config.value.systemPrompt.trim() !== '';
 });
 
 // 关闭配置面板
@@ -41,10 +55,6 @@ defineExpose({
 </script>
 
 <template>
-    <!-- # TODO: 自定义用户配置
-    1. 自定义system prompt/Global system prompt，分别用两个栏目实现，每个栏目设有属性名称，名称旁的显示帮助icon，下方占全宽的文本框
-    2. 自定义模型参数，用滑条实现
-    3. 指令列表指南 -->
     <Teleport to="body">
         <Transition name="config-panel" enter-active-class="transition ease-in-out duration-300"
             enter-from-class="transform translate-x-full opacity-0" enter-to-class="transform translate-x-0 opacity-100"
@@ -66,7 +76,7 @@ defineExpose({
                         自定义系统提示词
                     </h3>
 
-                    <!-- 全局系统提示 -->
+                    <!-- 全局系统提示词 -->
                     <div class="mb-6">
                         <div class="flex items-center mb-2">
                             <label class="font-medium">全局系统提示词</label>
@@ -76,12 +86,12 @@ defineExpose({
                                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </div>
-                        <textarea v-model="config.globalSystemPrompt"
-                            class="w-full h-32 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                            placeholder="输入全局系统提示词..."></textarea>
+                        <textarea v-model="globalSystemPrompt"
+                            class="w-full h-32 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none bg-white focus:ring-2 focus:ring-blue-500 resize-none"
+                            :placeholder="defaultSystemPrompt"></textarea>
                     </div>
 
-                    <!-- 当前对话系统提示 -->
+                    <!-- 当前对话系统提示词 -->
                     <div>
                         <div class="flex items-center mb-2">
                             <label class="font-medium">当前对话系统提示词</label>
@@ -90,10 +100,20 @@ defineExpose({
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
+                            <span v-if="isCurrentPromptLocked" class="ml-2 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                                已锁定（当前对话已开始）
+                            </span>
                         </div>
-                        <textarea v-model="config.currentSystemPrompt"
-                            class="w-full h-32 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                            :placeholder="config.globalSystemPrompt"></textarea>
+                        <textarea v-model="config.systemPrompt"
+                            :disabled="isCurrentPromptLocked"
+                            :class="[
+                                'w-full h-32 px-4 py-2 border rounded-lg focus:outline-none resize-none',
+                                isCurrentPromptLocked 
+                                    ? 'border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed' 
+                                    : 'border-gray-300 bg-white focus:ring-2 focus:ring-blue-500'
+                            ]"
+                            :placeholder="globalSystemPrompt ? globalSystemPrompt: defaultSystemPrompt"
+                            :title="isCurrentPromptLocked ? '当前对话已开始，无法修改系统提示词' : ''"></textarea>
                     </div>
                 </div>
 

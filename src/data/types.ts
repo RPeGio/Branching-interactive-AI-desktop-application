@@ -5,18 +5,31 @@ export interface BalanceMessage {
 }
 
 export interface HistoryItem {
-    id: number;
-    title: string;
-    date: string;
-    contexts: ContextItem[];
+    id: number,
+    title: string,
+    date: string,
+    config: ModelParamsForServer,
+    contexts: ContextItem[],
 }
 
 export interface ContextItem {
-    role: string;
-    content: string;
+    role: string,
+    content: string,
 }
 
-export interface ModelConfig {
+export interface GlobalUserConfig {
+    globalSystemPrompt: string,
+}
+
+export interface ConfigItem {
+    systemPrompt: string,
+    temperature: number,
+    maxTokens: number,
+    topP: number,
+    frequencyPenalty: number,
+}
+
+export interface ModelParamsForServer {
     temperature: number,
     max_tokens: number,
     top_p: number,

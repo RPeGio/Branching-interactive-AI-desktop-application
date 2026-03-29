@@ -2,7 +2,7 @@
 import { onBeforeMount, ref, watch } from 'vue';
 import History from './components/History.vue';
 import UserConfig from './components/UserConfig.vue';
-import type { BalanceMessage, HistoryItem, ContextItem, ModelConfig } from './data/types'
+import type { BalanceMessage, HistoryItem, ContextItem, GlobalUserConfig, ConfigItem, ModelParamsForServer } from './data/types'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Store } from '@tauri-apps/plugin-store';
@@ -10,14 +10,23 @@ import { MdToHtml } from 'streaming-md-to-html';
 
 const showHistory = ref(false);
 const showConfig = ref(false);
-const userConfig = ref<InstanceType<typeof UserConfig>>();
+const userConfig = ref<ConfigItem>({
+    systemPrompt: '',
+    temperature: 1,
+    maxTokens: 4000,
+    topP: 0.9,
+    frequencyPenalty: 0.5
+});
 const currentId = ref<number | null>(null);
 const isSending = ref<boolean>(false);
 const isTokenVisible = ref<boolean>(false);
 const bearerToken = ref<string>('');
 const tokenDisplayForm = ref<string>('password');
 const currentCharacter = ref<string | null>(null);
-const systemPrompt = ref<string>('你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）')
+const defaultSystemPrompt = ref<string>('你是一个得力的助手，（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）');
+const globalSystemPrompt = ref<string>('');
+// const currentSystemPrompt = ref<string>('');
+const isFirstMessageSent = ref<boolean>(false);
 let converter = new MdToHtml();
 
 onBeforeMount(async () => {
@@ -25,12 +34,8 @@ onBeforeMount(async () => {
         autoSave: true, defaults: {
             'bearerToken': '',
             'history': [],
-            'userConfig': {
-                'systemPrompt': `${systemPrompt.value}`,
-                'modelParams': {
-                    'max_tokens': 4000,
-                    'temperature': 0.7
-                }
+            'globalUserConfig': {
+                'globalSystemPrompt': `${defaultSystemPrompt.value}`,
             }
         }
     });
@@ -39,7 +44,19 @@ onBeforeMount(async () => {
         bearerToken.value = import.meta.env.VITE_API_KEY || '';
         await store.set('bearerToken', bearerToken.value);
     }
+    
+    // 从存储加载用户配置
+    const globalConfig = await store.get('globalUserConfig') as GlobalUserConfig;
+    if (globalConfig) {
+        globalSystemPrompt.value = globalConfig.globalSystemPrompt;
+    }
 })
+
+// 处理背景遮罩点击事件
+const panelClose = () => {
+    showHistory.value = false;
+    showConfig.value = false;
+};
 
 const loadHistoryToApp = (item: HistoryItem) => {
     console.log('加载历史记录:', item);
@@ -82,11 +99,30 @@ const loadHistoryToApp = (item: HistoryItem) => {
     }
 };
 
+function getCurrentSystemPrompt(): string {
+    if (!userConfig.value.systemPrompt) {
+        if (!globalSystemPrompt.value)
+            return defaultSystemPrompt.value;
+        return globalSystemPrompt.value;
+    }
+    return userConfig.value.systemPrompt;
+}
+
+function getModelConfig(userConfig: ConfigItem): ModelParamsForServer {
+    return {
+        temperature: userConfig.temperature,
+        max_tokens: userConfig.maxTokens,
+        top_p: userConfig.topP,
+        frequency_penalty: userConfig.frequencyPenalty,
+    }
+}
+
 function collectContexts(): ContextItem[] {
+
     const contexts: ContextItem[] = [
         {
             // 'content': '你是一个测试用AI，你需要用尽可能短的输出（markdown仅可使用粗体，斜体，代码块，header，其余均严厉禁止使用）来减少token用量，以方便程序员测试',
-            'content': `${systemPrompt.value}`,
+            'content': `${getCurrentSystemPrompt()}`,
             // 'content': '你是一只兽耳猫娘，与你的男性主人住在一起，性格偏内向但是很抖M，穿着暴露且性感，你需要时刻勾引你的主人注意自己的身体并一步步勾引主人与你发生关系。多使用动作描写，避免用词隐晦，在体现出内向性格的同时也展现一点开放。',
             'role': 'system',
         },
@@ -134,16 +170,19 @@ async function updateHistory(title?: string) {
     const store = await Store.load('store.json');
     const history: HistoryItem[] = await store.get('history') || [];
     const historyLength = history.length;
+    const modelConfig = getModelConfig(userConfig.value);
     if (title) {
         history.push({
             'id': historyLength,
             'title': title,
             'date': formatDate(new Date(Date.now())),
+            'config': modelConfig,
             'contexts': contexts,
         });
         currentId.value = historyLength;
     } else {
         const currentHistoryIndex = history.findIndex(h => h.id === currentId.value);
+        history[currentHistoryIndex].config = modelConfig;
         history[currentHistoryIndex].contexts = contexts;
     }
     await store.set('history', history);
@@ -209,21 +248,10 @@ async function send_msg() {
         return;
     }
 
-    if (userInput == '/setSystemPrompt') {
-        let customPrompt = prompt('自定义系统提示词：');
-        if (!customPrompt) {
-            alert("提示词不能为空！");
-            emptyInput();
-            return;
-        }
-        systemPrompt.value = customPrompt;
-        // console.log(systemPrompt.value);
-        emptyInput();
-        return;
-    }
-
-    const config = userConfig.value?.config;
+    const config = userConfig.value;
     console.log(config);
+    const modelConfig = getModelConfig(userConfig.value);
+    console.log(modelConfig);
 
     const contexts = collectContexts();
 
@@ -255,7 +283,22 @@ async function send_msg() {
     await invoke('stream_chat', {
         key: bearerToken.value,
         contexts: contexts,
+        modelConfig: modelConfig,
+        // 尽管后端标注的变量名是model_config，但是Tauri的命令系统会自动处理命名转换，这里必须用小驼峰
+        // 到底有多屎
     }).then(() => {
+        // 首次成功发送消息，触发系统提示词同步
+        if (!isFirstMessageSent.value) {
+            isFirstMessageSent.value = true;
+            
+            // 检查是否需要同步系统提示词
+            if (userConfig.value && (!userConfig.value.systemPrompt || userConfig.value.systemPrompt.trim() === '')) {
+                // 同步全局系统提示词到当前对话
+                userConfig.value.systemPrompt = globalSystemPrompt.value;
+                console.log('首次发送消息成功，已同步全局系统提示词到当前对话');
+            }
+        }
+        
         const finalContexts = collectContexts();
         if (finalContexts.length == 4) {
             finalContexts.shift();
@@ -340,7 +383,12 @@ listen("balance", (event) => {
     console.log('Balance info:', event.payload);
     const infos = event.payload as BalanceMessage;
     alert(`当前api-key可用性：${infos.available}\n当前剩余余额：${infos.balance} ${infos.currency}`);
-})
+});
+
+// watch(globalSystemPrompt, (_, __) => {
+//     // console.log(globalSystemPrompt.value);
+//     console.log(userConfig.value);
+// });
 </script>
 
 <template>
@@ -356,10 +404,26 @@ listen("balance", (event) => {
         <Transition name="mask" enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0"
             enter-to-class="opacity-100" leave-active-class="transition ease-in-out duration-300"
             leave-from-class="opacity-100" leave-to-class="opacity-0">
-            <div v-if="showHistory || showConfig" class="fixed inset-0 bg-black/40 z-40" @click="showHistory = false, showConfig = false"></div>
+            <div
+                v-if="showHistory || showConfig" 
+                class="fixed inset-0 bg-black/40 z-40" 
+                @click="panelClose"
+            ></div>
         </Transition>
-        <History :isVisible="showHistory" :historyItems="historyItems" @close="showHistory = false" @load="loadHistoryToApp" @new-conversation="createNewConversation" />
-        <UserConfig :isVisible="showConfig" ref="userConfig" @close="showConfig = false" />
+        <History 
+            :isVisible="showHistory" 
+            :historyItems="historyItems" 
+            @close="panelClose" 
+            @load="loadHistoryToApp" 
+            @new-conversation="createNewConversation" 
+        />
+        <UserConfig 
+            :isVisible="showConfig"
+            v-model:globalSystemPrompt="globalSystemPrompt"
+            v-model:userConfig="userConfig"
+            v-model:default-system-prompt="defaultSystemPrompt"
+            @close="panelClose"
+        />
 
         <!-- Token 输入区域 - 可展开/收起 -->
         <div class="fixed bottom-20 left-0 right-0 bg-white border-t border-gray-200 p-4 w-full z-10"

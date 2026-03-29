@@ -21,7 +21,7 @@ pub struct BalanceMessage {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct UserConfig {
     pub temperature: f32,
-    pub max_tokens: f32,
+    pub max_tokens: u32,
     pub top_p: f32,
     pub frequency_penalty: f32,
 }
