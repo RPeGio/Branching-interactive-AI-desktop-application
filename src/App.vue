@@ -276,6 +276,9 @@ async function sendMessageToAI(userInput: string) {
         showNotification(`An error occurs when sending message: ${err}`);
         currentCharacter.value = null;
         isSending.value = false;
+        markdownRawLines.value = '';
+        startCollectingOptions.value = false;
+        options.value.raw = null;
     });
 }
 

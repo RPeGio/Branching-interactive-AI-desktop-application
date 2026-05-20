@@ -115,32 +115,45 @@ pub async fn stream_chat(
     if response.status().to_string() != String::from("200 OK") {
         return Err(format!("{}", response.status().to_string()));
     }
-    app.emit("completion-status", response.status().to_string())
-        .unwrap();
+    let _ = app.emit("completion-status", response.status().to_string());
 
     let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
-        // 将二进制chunk转换为字符串（SSE格式）
         if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-            // 解析 SSE 数据 (data: {...}\n\n)
-            for line in text.lines() {
-                if line.starts_with("data: ") {
-                    let data = &line[6..];
-                    if data == "[DONE]" {
-                        println!("Stream completed");
-                        app.emit("completion-end", "Stream completed").unwrap();
-                        break;
-                    } else {
-                        let parsed_data: serde_json::Value = serde_json::from_str(data).unwrap();
-                        if let Some(content) =
-                            parsed_data["choices"][0]["delta"]["content"].as_str()
-                        {
-                            if !content.is_empty() {
-                                // print!("{}", content);
-                                // std::io::stdout().flush().unwrap();
-                                app.emit("completion-chunk", content.to_string()).unwrap();
+            buffer.push_str(&text);
+
+            loop {
+                let boundary = match buffer.find("\n\n") {
+                    Some(pos) => pos,
+                    None => break,
+                };
+
+                let event = buffer[..boundary].to_string();
+                buffer = buffer[boundary + 2..].to_string();
+
+                for line in event.lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        if data == "[DONE]" {
+                            println!("Stream completed");
+                            let _ = app.emit("completion-end", "Stream completed");
+                            return Ok(());
+                        }
+
+                        match serde_json::from_str::<serde_json::Value>(data) {
+                            Ok(parsed) => {
+                                if let Some(content) =
+                                    parsed["choices"][0]["delta"]["content"].as_str()
+                                {
+                                    if !content.is_empty() {
+                                        let _ = app.emit("completion-chunk", content.to_string());
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to parse SSE data: {} -- raw: {}", e, data);
                             }
                         }
                     }
@@ -148,6 +161,8 @@ pub async fn stream_chat(
             }
         }
     }
+
+    let _ = app.emit("completion-end", "Stream completed");
     Ok(())
 }
 
